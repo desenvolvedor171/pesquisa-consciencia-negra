@@ -2,7 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const { createClient } = require('@libsql/client');
 const QUESTIONS = require('./questions');
 
 const PORT = process.env.PORT || 3000;
@@ -21,11 +20,18 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- Banco de dados ----------
-// Local: arquivo survey.db | Nuvem (Turso): DATABASE_URL + DATABASE_AUTH_TOKEN
-const db = createClient({
-  url: process.env.DATABASE_URL || ('file:' + path.join(__dirname, 'survey.db')),
-  authToken: process.env.DATABASE_AUTH_TOKEN
-});
+// Local: SQLite (survey.db) | Produção: Postgres/Supabase via DATABASE_URL
+const db = require('./db');
+
+const RESPONSES_DDL = db.isPostgres
+  ? `CREATE TABLE IF NOT EXISTS responses (
+      id SERIAL PRIMARY KEY,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`
+  : `CREATE TABLE IF NOT EXISTS responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )`;
 
 async function initDb() {
   await db.batch([
@@ -35,10 +41,7 @@ async function initDb() {
       options TEXT NOT NULL,
       correct INTEGER NULL
     )`,
-    `CREATE TABLE IF NOT EXISTS responses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-    )`,
+    RESPONSES_DDL,
     `CREATE TABLE IF NOT EXISTS answers (
       response_id INTEGER NOT NULL REFERENCES responses(id) ON DELETE CASCADE,
       question_id INTEGER NOT NULL,
@@ -99,8 +102,8 @@ app.post('/api/submit', async (req, res) => {
     seen.add(a.questionId);
   }
 
-  const r = await db.execute('INSERT INTO responses DEFAULT VALUES');
-  const responseId = Number(r.lastInsertRowid);
+  const r = await db.execute('INSERT INTO responses DEFAULT VALUES RETURNING id');
+  const responseId = Number(r.rows[0].id);
   await db.batch(answers.map(a => ({
     sql: 'INSERT INTO answers (response_id, question_id, option_index) VALUES (?, ?, ?)',
     args: [responseId, a.questionId, a.optionIndex]
