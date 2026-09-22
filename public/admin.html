@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin — Pesquisa Consciência Negra | E.E. Prof. Manoel Rufino</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Painel <span>do Administrador</span></h1>
+    <p>Resultados da pesquisa em porcentagens</p>
+  </header>
+  <main>
+    <div id="login" class="card" style="display:none">
+      <h2>Acesso restrito</h2>
+      <input type="text" id="username" placeholder="Usuário" autocomplete="username">
+      <input type="password" id="password" placeholder="Senha" autocomplete="current-password">
+      <p class="error" id="loginError"></p>
+      <button id="btnLogin">Entrar</button>
+    </div>
+
+    <div id="dash" style="display:none">
+      <div class="card toolbar">
+        <strong id="total">0 respostas</strong>
+        <span class="spacer"></span>
+        <button id="btnRefresh" class="secondary">Atualizar</button>
+        <button id="btnExport" class="secondary">Exportar CSV</button>
+        <button id="btnPass" class="secondary">Trocar senha</button>
+        <button id="btnReset" class="danger">Apagar respostas</button>
+        <button id="btnLogout" class="secondary">Sair</button>
+      </div>
+      <div id="results"></div>
+    </div>
+  </main>
+  <footer><a href="/">Voltar à pesquisa</a></footer>
+
+  <script>
+    const letters = ['A', 'B', 'C', 'D'];
+    let charts = [];
+
+    async function checkLogin() {
+      const res = await fetch('/api/admin/me');
+      const data = await res.json();
+      if (data.loggedIn) showDash();
+      else {
+        document.getElementById('login').style.display = 'block';
+        document.getElementById('dash').style.display = 'none';
+      }
+    }
+
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) { document.getElementById('password').value = ''; showDash(); }
+      else document.getElementById('loginError').textContent = 'Usuário ou senha inválidos.';
+    });
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnLogin').click();
+    });
+
+    async function showDash() {
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('dash').style.display = 'block';
+      await loadResults();
+    }
+
+    async function loadResults() {
+      const res = await fetch('/api/admin/results');
+      if (res.status === 401) { checkLogin(); return; }
+      const data = await res.json();
+      document.getElementById('total').textContent =
+        `${data.totalResponses} resposta(s) no total`;
+      const box = document.getElementById('results');
+      box.innerHTML = '';
+      charts.forEach(c => c.destroy());
+      charts = [];
+
+      if (data.totalResponses === 0) {
+        box.innerHTML = '<div class="card center muted">Ainda não há respostas.</div>';
+        return;
+      }
+
+      data.questions.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        let badge = '<span class="badge info">Opinião</span>';
+        if (q.correct !== null && q.correct !== undefined) {
+          const cls = q.correctRate >= 50 ? 'good' : 'warn';
+          badge = `<span class="badge ${cls}">Acertos: ${q.correctRate}%</span>`;
+        }
+        div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}${badge}</p>
+          <canvas id="chart${q.id}"></canvas>` +
+          q.options.map((opt, j) => {
+            const mark = (q.correct === j) ? ' <span class="correct-opt">✓</span>' : '';
+            return `<div class="result-row"><span><b>${letters[j]}</b>) ${opt}${mark}</span><span><b>${q.percentages[j]}%</b> <span class="muted">(${q.votes[j]})</span></span></div>`;
+          }).join('');
+        box.appendChild(div);
+
+        charts.push(new Chart(document.getElementById('chart' + q.id), {
+          type: 'bar',
+          data: {
+            labels: q.options.map((_, j) => letters[j]),
+            datasets: [{ data: q.percentages, backgroundColor: ['#f2b705', '#2e9e5b', '#d64545', '#7a6ff0'] }]
+          },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
+              x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+            }
+          }
+        }));
+      });
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', loadResults);
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      location.reload();
+    });
+    document.getElementById('btnExport').addEventListener('click', () => {
+      window.location = '/api/admin/export';
+    });
+    document.getElementById('btnReset').addEventListener('click', async () => {
+      if (!confirm('Apagar TODAS as respostas? Essa ação não pode ser desfeita.')) return;
+      await fetch('/api/admin/reset', { method: 'POST' });
+      loadResults();
+    });
+    document.getElementById('btnPass').addEventListener('click', async () => {
+      const currentPassword = prompt('Digite a senha atual:');
+      if (!currentPassword) return;
+      const newPassword = prompt('Digite a nova senha (mínimo 4 caracteres):');
+      if (!newPassword) return;
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      alert(res.ok ? 'Senha alterada com sucesso!' : (data.error || 'Erro.'));
+    });
+
+    checkLogin();
+  </script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pesquisa Sobre Consciência Negra – Escola Estadual Professor Manoel Rufino</title>
+  <meta name="description" content="Pesquisa anônima com 20 perguntas sobre Consciência Negra, história e cultura afro-brasileira — Escola Estadual Professor Manoel Rufino.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Pesquisa sobre <span>Consciência Negra</span></h1>
+    <p>Escola Estadual Professor Manoel Rufino</p>
+    <p>Responda as 20 perguntas abaixo. A pesquisa é anônima.</p>
+  </header>
+  <main>
+    <div id="loading" class="card center muted">Carregando perguntas...</div>
+    <form id="survey" style="display:none"></form>
+    <div id="done" class="card center" style="display:none">
+      <h2 class="success">Resposta enviada. Obrigado por participar!</h2>
+      <p class="muted">Sua participação ajuda a medir o conhecimento sobre a história e cultura afro-brasileira.</p>
+      <button id="again" class="secondary">Responder novamente</button>
+    </div>
+  </main>
+  <footer>Pesquisa sobre Consciência Negra · <a href="admin.html">Área do administrador</a></footer>
+
+  <script>
+    const form = document.getElementById('survey');
+    const loading = document.getElementById('loading');
+    const done = document.getElementById('done');
+    const letters = ['A', 'B', 'C', 'D'];
+    let questions = [];
+
+    async function load() {
+      const res = await fetch('/api/questions');
+      questions = await res.json();
+      loading.style.display = 'none';
+      form.style.display = 'block';
+      questions.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}</p>` +
+          q.options.map((opt, j) =>
+            `<label class="opt"><input type="radio" name="q${q.id}" value="${j}" required> <b>${letters[j]}</b>) ${opt}</label>`
+          ).join('');
+        form.appendChild(div);
+      });
+      const btn = document.createElement('button');
+      btn.type = 'submit';
+      btn.textContent = 'Enviar respostas';
+      const wrap = document.createElement('div');
+      wrap.className = 'center';
+      wrap.appendChild(btn);
+      form.appendChild(wrap);
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const answers = questions.map(q => {
+        const checked = form.querySelector(`input[name="q${q.id}"]:checked`);
+        return { questionId: q.id, optionIndex: Number(checked.value) };
+      });
+      const res = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers })
+      });
+      if (res.ok) {
+        form.style.display = 'none';
+        done.style.display = 'block';
+        window.scrollTo(0, 0);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Erro ao enviar.');
+      }
+    });
+
+    document.getElementById('again').addEventListener('click', () => location.reload());
+    load();
+  </script>
+</body>
+</html>
