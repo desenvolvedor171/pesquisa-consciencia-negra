@@ -1,4 +1,4 @@
-// 20 perguntas da pesquisa sobre Consciencia Negra.
+﻿// 20 perguntas da pesquisa sobre Consciencia Negra.
 // correct: indice da alternativa correta (0-3) | null = pergunta de opiniao (sem gabarito)
 module.exports = [
   {

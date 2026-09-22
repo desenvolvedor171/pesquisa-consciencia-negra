@@ -23,6 +23,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Local: SQLite (survey.db) | Produção: Postgres/Supabase via DATABASE_URL
 const db = require('./db');
 
+const QUESTIONS_DDL = db.isPostgres
+  ? `CREATE TABLE IF NOT EXISTS questions (
+      id SERIAL PRIMARY KEY,
+      text TEXT NOT NULL,
+      options TEXT NOT NULL,
+      correct INTEGER NULL
+    )`
+  : `CREATE TABLE IF NOT EXISTS questions (
+      id INTEGER PRIMARY KEY,
+      text TEXT NOT NULL,
+      options TEXT NOT NULL,
+      correct INTEGER NULL
+    )`;
+
 const RESPONSES_DDL = db.isPostgres
   ? `CREATE TABLE IF NOT EXISTS responses (
       id SERIAL PRIMARY KEY,
@@ -35,12 +49,7 @@ const RESPONSES_DDL = db.isPostgres
 
 async function initDb() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS questions (
-      id INTEGER PRIMARY KEY,
-      text TEXT NOT NULL,
-      options TEXT NOT NULL,
-      correct INTEGER NULL
-    )`,
+    QUESTIONS_DDL,
     RESPONSES_DDL,
     `CREATE TABLE IF NOT EXISTS answers (
       response_id INTEGER NOT NULL REFERENCES responses(id) ON DELETE CASCADE,
@@ -184,6 +193,36 @@ app.get('/api/admin/results', requireAuth, async (req, res) => {
 app.post('/api/admin/reset', requireAuth, async (req, res) => {
   await db.batch(['DELETE FROM answers', 'DELETE FROM responses']);
   res.json({ ok: true });
+});
+
+// Sincroniza as perguntas do banco com o arquivo questions.js (sem recriar o site)
+// Lê o arquivo fresco do disco: basta editar questions.js e clicar em sincronizar.
+app.post('/api/admin/sync-questions', requireAuth, async (req, res) => {
+  delete require.cache[require.resolve('./questions')];
+  const FILE_QUESTIONS = require('./questions');
+  const current = await getQuestions();
+  const same = current.length === FILE_QUESTIONS.length && current.every((q, i) =>
+    q.text === FILE_QUESTIONS[i].text &&
+    JSON.stringify(q.options) === JSON.stringify(FILE_QUESTIONS[i].options) &&
+    (q.correct === FILE_QUESTIONS[i].correct || (q.correct == null && FILE_QUESTIONS[i].correct == null))
+  );
+  if (same) return res.json({ ok: true, changed: false, message: 'As perguntas já estão atualizadas.' });
+  const total = Number((await db.execute('SELECT COUNT(*) AS c FROM responses')).rows[0].c);
+  if (total > 0) {
+    return res.status(400).json({ error: `Há ${total} resposta(s) registrada(s). Apague as respostas antes de trocar as perguntas.` });
+  }
+  await db.batch(['DELETE FROM answers', 'DELETE FROM responses']);
+  if (db.isPostgres) {
+    await db.execute('TRUNCATE questions RESTART IDENTITY');
+  } else {
+    await db.execute('DELETE FROM questions');
+    await db.execute("DELETE FROM sqlite_sequence WHERE name='questions'");
+  }
+  await db.batch(FILE_QUESTIONS.map(q => ({
+    sql: 'INSERT INTO questions (text, options, correct) VALUES (?, ?, ?)',
+    args: [q.text, JSON.stringify(q.options), q.correct]
+  })));
+  res.json({ ok: true, changed: true, message: 'Perguntas atualizadas com sucesso!' });
 });
 
 app.get('/api/admin/export', requireAuth, async (req, res) => {
