@@ -59,6 +59,10 @@ async function initDb() {
     `CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
       password_hash TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     )`
   ]);
 
@@ -77,8 +81,24 @@ async function initDb() {
   if (!adminExists) {
     const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
     await db.execute({ sql: 'INSERT INTO users (username, password_hash) VALUES (?, ?)', args: [ADMIN_USER, hash] });
-    console.log(`Seed: usuário admin criado (login: ${ADMIN_USER})`);
+  console.log(`Seed: usuário admin criado (login: ${ADMIN_USER})`);
   }
+  // Seed da época (só na primeira vez)
+  const epochExists = (await db.execute("SELECT 1 FROM meta WHERE key='epoch'")).rows[0];
+  if (!epochExists) {
+    await db.execute("INSERT INTO meta (key, value) VALUES ('epoch', '1')");
+  }
+}
+
+// Época da pesquisa: muda a cada reset e libera os dispositivos para votar de novo
+async function getEpoch() {
+  const row = (await db.execute("SELECT value AS v FROM meta WHERE key='epoch'")).rows[0];
+  return row ? String(row.v) : '1';
+}
+async function bumpEpoch() {
+  const next = String(Number(await getEpoch()) + 1);
+  await db.execute({ sql: "UPDATE meta SET value=? WHERE key='epoch'", args: [next] });
+  return next;
 }
 
 async function getQuestions() {
@@ -89,12 +109,26 @@ async function getQuestions() {
 // ---------- Rotas públicas ----------
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+app.get('/api/epoch', async (req, res) => {
+  res.json({ epoch: await getEpoch() });
+});
+
 app.get('/api/questions', async (req, res) => {
   const list = (await getQuestions()).map(({ correct, ...rest }) => rest); // esconde o gabarito
   res.json(list);
 });
 
 app.post('/api/submit', async (req, res) => {
+  const cookies = Object.fromEntries(
+    (req.headers.cookie || '').split(';').filter(Boolean).map(c => {
+      const i = c.indexOf('=');
+      return [c.slice(0, i).trim(), decodeURIComponent(c.slice(i + 1).trim())];
+    })
+  );
+  const epoch = await getEpoch();
+  if (cookies.respondido === epoch) {
+    return res.status(403).json({ error: 'Este dispositivo já respondeu à pesquisa.' });
+  }
   const { answers } = req.body || {};
   const questions = await getQuestions();
 
@@ -117,6 +151,7 @@ app.post('/api/submit', async (req, res) => {
     sql: 'INSERT INTO answers (response_id, question_id, option_index) VALUES (?, ?, ?)',
     args: [responseId, a.questionId, a.optionIndex]
   })));
+  res.cookie('respondido', epoch, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' });
   res.json({ ok: true });
 });
 
@@ -192,6 +227,7 @@ app.get('/api/admin/results', requireAuth, async (req, res) => {
 
 app.post('/api/admin/reset', requireAuth, async (req, res) => {
   await db.batch(['DELETE FROM answers', 'DELETE FROM responses']);
+  await bumpEpoch(); // libera os dispositivos para votar de novo
   res.json({ ok: true });
 });
 
@@ -218,6 +254,7 @@ app.post('/api/admin/sync-questions', requireAuth, async (req, res) => {
     await db.execute('DELETE FROM questions');
     await db.execute("DELETE FROM sqlite_sequence WHERE name='questions'");
   }
+  await bumpEpoch(); // libera os dispositivos para votar de novo
   await db.batch(FILE_QUESTIONS.map(q => ({
     sql: 'INSERT INTO questions (text, options, correct) VALUES (?, ?, ?)',
     args: [q.text, JSON.stringify(q.options), q.correct]

@@ -19,7 +19,10 @@
     <div id="done" class="card center" style="display:none">
       <h2 class="success">Resposta enviada. Obrigado por participar!</h2>
       <p class="muted">Sua participação ajuda a medir o conhecimento sobre a história e cultura afro-brasileira.</p>
-      <button id="again" class="secondary">Responder novamente</button>
+    </div>
+    <div id="already" class="card center" style="display:none">
+      <h2>Este dispositivo já respondeu.</h2>
+      <p class="muted">Cada dispositivo pode enviar apenas uma resposta por rodada da pesquisa.</p>
     </div>
   </main>
   <footer>Pesquisa sobre Consciência Negra · <a href="admin.html">Área do administrador</a></footer>
@@ -30,8 +33,29 @@
     const done = document.getElementById('done');
     const letters = ['A', 'B', 'C', 'D'];
     let questions = [];
+    let currentEpoch = null;
+
+    function showAlready() {
+      loading.style.display = 'none';
+      form.style.display = 'none';
+      done.style.display = 'none';
+      document.getElementById('already').style.display = 'block';
+    }
 
     async function load() {
+      try {
+        const er = await fetch('/api/epoch');
+        const ed = await er.json();
+        currentEpoch = ed.epoch;
+        if (localStorage.getItem('pesquisa_epoch') !== currentEpoch) {
+          localStorage.removeItem('pesquisa_respondida');
+          localStorage.setItem('pesquisa_epoch', currentEpoch);
+        }
+      } catch (e) { /* sem rede: segue o jogo */ }
+      if (localStorage.getItem('pesquisa_respondida') === '1') {
+        showAlready();
+        return;
+      }
       const res = await fetch('/api/questions');
       questions = await res.json();
       loading.style.display = 'none';
@@ -66,8 +90,15 @@
         body: JSON.stringify({ answers })
       });
       if (res.ok) {
+        localStorage.setItem('pesquisa_respondida', '1');
+        if (currentEpoch) localStorage.setItem('pesquisa_epoch', currentEpoch);
         form.style.display = 'none';
         done.style.display = 'block';
+        window.scrollTo(0, 0);
+      } else if (res.status === 403) {
+        localStorage.setItem('pesquisa_respondida', '1');
+        if (currentEpoch) localStorage.setItem('pesquisa_epoch', currentEpoch);
+        showAlready();
         window.scrollTo(0, 0);
       } else {
         const data = await res.json();
@@ -75,7 +106,6 @@
       }
     });
 
-    document.getElementById('again').addEventListener('click', () => location.reload());
     load();
   </script>
 </body>
