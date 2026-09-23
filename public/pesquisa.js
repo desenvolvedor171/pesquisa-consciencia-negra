@@ -2,18 +2,59 @@ async function initSurvey(slug) {
   const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
   const form = document.getElementById('survey');
   const loading = document.getElementById('loading');
-  const done = document.getElementById('done');
   const already = document.getElementById('already');
+  const phase = document.getElementById('phase');
+  const final = document.getElementById('final');
+  const FLOW = {
+    'jogos-escolares': { page: '/cabelos-naturais.html', title: 'Estética, Identidade e Cabelos Naturais' },
+    'cabelos-naturais': { page: '/', title: 'Relações Étnico-Raciais nos Jogos Escolares' }
+  };
+  let cdTimer = null;
   const FLAG = 'pesquisa_respondida_' + slug;
   const EPKEY = 'pesquisa_epoch_' + slug;
   let questions = [];
   let currentEpoch = null;
 
-  function showAlready() {
+  function hideAll() {
     loading.style.display = 'none';
     form.style.display = 'none';
-    done.style.display = 'none';
+    already.style.display = 'none';
+    phase.style.display = 'none';
+    final.style.display = 'none';
+  }
+
+  function showAlready() {
+    hideAll();
     already.style.display = 'block';
+  }
+
+  function showPhase(other) {
+    hideAll();
+    if (cdTimer) clearInterval(cdTimer);
+    document.getElementById('phaseText').textContent =
+      `Você concluiu esta fase! Passando para a próxima: ${other.title}.`;
+    phase.style.display = 'block';
+    window.scrollTo(0, 0);
+    let n = 5;
+    const cd = document.getElementById('countdown');
+    cd.textContent = n;
+    document.getElementById('goNow').onclick = () => { clearInterval(cdTimer); location.href = other.page; };
+    cdTimer = setInterval(() => {
+      n--;
+      if (n <= 0) { clearInterval(cdTimer); location.href = other.page; }
+      else cd.textContent = n;
+    }, 1000);
+  }
+
+  function showFinal() {
+    hideAll();
+    if (cdTimer) clearInterval(cdTimer);
+    const q1 = Number(localStorage.getItem('respondidas_jogos-escolares') || 0);
+    const q2 = Number(localStorage.getItem('respondidas_cabelos-naturais') || 0);
+    document.getElementById('finalText').textContent =
+      `Você respondeu ${q1 + q2} perguntas nas 2 fases da pesquisa.`;
+    final.style.display = 'block';
+    window.scrollTo(0, 0);
   }
 
   async function load() {
@@ -112,9 +153,10 @@ async function initSurvey(slug) {
     if (res.ok) {
       localStorage.setItem(FLAG, '1');
       if (currentEpoch) localStorage.setItem(EPKEY, currentEpoch);
-      form.style.display = 'none';
-      done.style.display = 'block';
-      window.scrollTo(0, 0);
+      localStorage.setItem('respondidas_' + slug, String(questions.length));
+      const otherSlug = slug === 'jogos-escolares' ? 'cabelos-naturais' : 'jogos-escolares';
+      if (localStorage.getItem('pesquisa_respondida_' + otherSlug) === '1') showFinal();
+      else showPhase(FLOW[otherSlug]);
     } else if (res.status === 403) {
       localStorage.setItem(FLAG, '1');
       if (currentEpoch) localStorage.setItem(EPKEY, currentEpoch);

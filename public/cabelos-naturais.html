@@ -19,9 +19,17 @@
   <main>
     <div id="loading" class="card center muted">Carregando perguntas...</div>
     <form id="survey" style="display:none"></form>
-    <div id="done" class="card center" style="display:none">
-      <h2 class="success">Resposta enviada. Obrigado por participar!</h2>
-      <p class="muted">Sua participação ajuda o projeto de iniciação científica da escola.</p>
+    <div id="phase" class="card center" style="display:none">
+      <h2 class="success">Fase concluída!</h2>
+      <p class="muted" id="phaseText"></p>
+      <p><strong>Indo para a próxima fase em <span id="countdown">5</span>...</strong></p>
+      <button id="goNow" class="secondary">Ir agora</button>
+    </div>
+    <div id="final" class="card center" style="display:none">
+      <h2 class="success">Pesquisa completa!</h2>
+      <p class="muted" id="finalText"></p>
+      <p class="muted">Todas as opiniões contam para o projeto. Obrigado por participar!</p>
+      <button onclick="location.href='/'">Voltar ao início</button>
     </div>
     <div id="already" class="card center" style="display:none">
       <h2>Este dispositivo já respondeu.</h2>
