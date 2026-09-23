@@ -64,6 +64,7 @@ button {
   cursor: pointer;
 }
 button:hover { filter: brightness(1.1); }
+button:disabled { opacity: .6; cursor: wait; }
 button.secondary { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
 button.danger { background: var(--red); color: #fff; }
 .center { text-align: center; }

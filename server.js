@@ -147,10 +147,16 @@ app.post('/api/submit', async (req, res) => {
 
   const r = await db.execute('INSERT INTO responses DEFAULT VALUES RETURNING id');
   const responseId = Number(r.rows[0].id);
-  await db.batch(answers.map(a => ({
-    sql: 'INSERT INTO answers (response_id, question_id, option_index) VALUES (?, ?, ?)',
-    args: [responseId, a.questionId, a.optionIndex]
-  })));
+  const placeholders = [];
+  const flatArgs = [];
+  for (const a of answers) {
+    placeholders.push('(?, ?, ?)');
+    flatArgs.push(responseId, a.questionId, a.optionIndex);
+  }
+  await db.execute({
+    sql: `INSERT INTO answers (response_id, question_id, option_index) VALUES ${placeholders.join(',')}`,
+    args: flatArgs
+  });
   res.cookie('respondido', epoch, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' });
   res.json({ ok: true });
 });
@@ -203,8 +209,7 @@ app.post('/api/admin/change-password', requireAuth, async (req, res) => {
 async function buildResults() {
   const questions = await getQuestions();
   const totalResponses = Number((await db.execute('SELECT COUNT(*) AS c FROM responses')).rows[0].c);
-  const data = [];
-  for (const q of questions) {
+  const data = await Promise.all(questions.map(async (q) => {
     const votes = [0, 0, 0, 0];
     const rows = (await db.execute({
       sql: 'SELECT option_index AS o, COUNT(*) AS c FROM answers WHERE question_id = ? GROUP BY option_index',
@@ -216,8 +221,8 @@ async function buildResults() {
     const correctRate = q.correct === null || total === 0
       ? null
       : Math.round((votes[q.correct] / total) * 1000) / 10;
-    data.push({ id: q.id, text: q.text, options: q.options, correct: q.correct, votes, total, percentages, correctRate });
-  }
+    return { id: q.id, text: q.text, options: q.options, correct: q.correct, votes, total, percentages, correctRate };
+  }));
   return { totalResponses, questions: data };
 }
 
