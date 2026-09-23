@@ -77,6 +77,9 @@
     document.getElementById('password').addEventListener('keydown', e => {
       if (e.key === 'Enter') document.getElementById('btnLogin').click();
     });
+    document.getElementById('username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnLogin').click();
+    });
 
     async function showDash() {
       document.getElementById('login').style.display = 'none';
