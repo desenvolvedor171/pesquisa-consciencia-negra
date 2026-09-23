@@ -23,7 +23,7 @@
 
     <div id="dash" style="display:none">
       <div class="card toolbar">
-        <strong id="total">0 respostas</strong>
+        <strong id="total">0 respostas</strong><span id="live" class="live-dot" title="Atualização automática ativa"></span><small class="muted">tempo real</small>
         <span class="spacer"></span>
         <button id="btnRefresh" class="secondary">Atualizar</button>
         <button id="btnExport" class="secondary">Exportar CSV</button>
@@ -39,7 +39,11 @@
 
   <script>
     const letters = ['A', 'B', 'C', 'D'];
-    let charts = [];
+    let charts = {};
+    let cardIds = [];
+    let lastSig = null;
+    let pollTimer = null;
+    let dashOn = false;
 
     async function checkLogin() {
       const res = await fetch('/api/admin/me');
@@ -69,65 +73,119 @@
     async function showDash() {
       document.getElementById('login').style.display = 'none';
       document.getElementById('dash').style.display = 'block';
-      await loadResults();
+      dashOn = true;
+      await loadResults(true);
+      if (!pollTimer) {
+        pollTimer = setInterval(() => {
+          if (dashOn && !document.hidden) loadResults(false);
+        }, 4000);
+      }
     }
 
-    async function loadResults() {
-      const res = await fetch('/api/admin/results');
-      if (res.status === 401) { checkLogin(); return; }
+    function setLive(on) {
+      const el = document.getElementById('live');
+      if (el) el.classList.toggle('on', on);
+    }
+
+    function sigOf(data) {
+      return data.totalResponses + '|' + data.questions.map(q => q.votes.join(',')).join(';');
+    }
+
+    async function loadResults(force) {
+      let res;
+      try {
+        res = await fetch('/api/admin/results');
+      } catch (e) { setLive(false); return; }
+      if (res.status === 401) {
+        dashOn = false;
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && dashOn) loadResults(false);
+    });
+
+    checkLogin();
+        return;
+      }
       const data = await res.json();
+      setLive(true);
       document.getElementById('total').textContent =
         `${data.totalResponses} resposta(s) no total`;
-      const box = document.getElementById('results');
-      box.innerHTML = '';
-      charts.forEach(c => c.destroy());
-      charts = [];
+      const sig = sigOf(data);
+      if (!force && sig === lastSig) return; // sem mudanças: não redesenha nada
+      lastSig = sig;
+      renderResults(data);
+    }
 
+    function badgeData(q) {
+      if (q.correct === null || q.correct === undefined) return { cls: 'info', text: 'Opinião' };
+      return { cls: q.correctRate >= 50 ? 'good' : 'warn', text: `Acertos: ${q.correctRate}%` };
+    }
+
+    function rowsFor(q) {
+      return q.options.map((opt, j) => {
+        const mark = (q.correct === j) ? ' <span class="correct-opt">✓</span>' : '';
+        return `<div class="result-row"><span><b>${letters[j]}</b>) ${opt}${mark}</span><span><b>${q.percentages[j]}%</b> <span class="muted">(${q.votes[j]})</span></span></div>`;
+      }).join('');
+    }
+
+    function renderResults(data) {
+      const box = document.getElementById('results');
       if (data.totalResponses === 0) {
+        Object.values(charts).forEach(c => c.destroy());
+        charts = {};
+        cardIds = [];
         box.innerHTML = '<div class="card center muted">Ainda não há respostas.</div>';
         return;
       }
-
-      data.questions.forEach((q, i) => {
-        const div = document.createElement('div');
-        div.className = 'card';
-        let badge = '<span class="badge info">Opinião</span>';
-        if (q.correct !== null && q.correct !== undefined) {
-          const cls = q.correctRate >= 50 ? 'good' : 'warn';
-          badge = `<span class="badge ${cls}">Acertos: ${q.correctRate}%</span>`;
-        }
-        div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}${badge}</p>
-          <canvas id="chart${q.id}"></canvas>` +
-          q.options.map((opt, j) => {
-            const mark = (q.correct === j) ? ' <span class="correct-opt">✓</span>' : '';
-            return `<div class="result-row"><span><b>${letters[j]}</b>) ${opt}${mark}</span><span><b>${q.percentages[j]}%</b> <span class="muted">(${q.votes[j]})</span></span></div>`;
-          }).join('');
-        box.appendChild(div);
-
-        charts.push(new Chart(document.getElementById('chart' + q.id), {
-          type: 'bar',
-          data: {
-            labels: q.options.map((_, j) => letters[j]),
-            datasets: [{ data: q.percentages, backgroundColor: ['#f2b705', '#2e9e5b', '#d64545', '#7a6ff0'] }]
-          },
-          options: {
-            plugins: { legend: { display: false } },
-            scales: {
-              y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
-              x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+      const ids = data.questions.map(q => q.id).join(',');
+      if (ids !== cardIds.join(',')) {
+        Object.values(charts).forEach(c => c.destroy());
+        charts = {};
+        cardIds = data.questions.map(q => q.id);
+        box.innerHTML = '';
+        data.questions.forEach((q, i) => {
+          const b = badgeData(q);
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
+            <canvas id="chart${q.id}"></canvas><div id="rows${q.id}">${rowsFor(q)}</div>`;
+          box.appendChild(div);
+          charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
+            type: 'bar',
+            data: {
+              labels: ['A', 'B', 'C', 'D'],
+              datasets: [{ data: q.percentages, backgroundColor: ['#f2b705', '#2e9e5b', '#d64545', '#7a6ff0'] }]
+            },
+            options: {
+              animation: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
+                x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+              }
             }
-          }
-        }));
-      });
+          });
+        });
+      } else {
+        data.questions.forEach((q) => {
+          const b = badgeData(q);
+          const badge = document.getElementById('badge' + q.id);
+          if (badge) { badge.className = 'badge ' + b.cls; badge.textContent = b.text; }
+          const rows = document.getElementById('rows' + q.id);
+          if (rows) rows.innerHTML = rowsFor(q);
+          const c = charts[q.id];
+          if (c) { c.data.datasets[0].data = q.percentages; c.update('none'); }
+        });
+      }
     }
 
-    document.getElementById('btnRefresh').addEventListener('click', loadResults);
+    document.getElementById('btnRefresh').addEventListener('click', () => loadResults(true));
     document.getElementById('btnSync').addEventListener('click', async () => {
       if (!confirm('Atualizar as perguntas a partir do arquivo questions.js?')) return;
       const res = await fetch('/api/admin/sync-questions', { method: 'POST' });
       const data = await res.json();
       alert(data.message || data.error || 'Erro.');
-      if (res.ok) loadResults();
+      if (res.ok) loadResults(true);
     });
     document.getElementById('btnLogout').addEventListener('click', async () => {
       await fetch('/api/admin/logout', { method: 'POST' });
@@ -139,7 +197,7 @@
     document.getElementById('btnReset').addEventListener('click', async () => {
       if (!confirm('Apagar TODAS as respostas? Essa ação não pode ser desfeita.')) return;
       await fetch('/api/admin/reset', { method: 'POST' });
-      loadResults();
+      loadResults(true);
     });
     document.getElementById('btnPass').addEventListener('click', async () => {
       const currentPassword = prompt('Digite a senha atual:');

@@ -98,3 +98,16 @@ canvas { max-height: 220px; }
 footer { text-align: center; color: var(--muted); padding: 20px; font-size: 0.85rem; }
 footer a { color: var(--gold); }
 .credit { text-align: right; font-size: 0.8rem; color: var(--muted); padding: 0 14px 16px; }
+/* Admin moderno + tempo real */
+#dash .toolbar { position: sticky; top: 0; z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #555; margin-left: 8px; vertical-align: middle; }
+.live-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.card { animation: fadeUp .3s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Fluidez no público */
+html { scroll-behavior: smooth; }
+button { transition: filter .15s, transform .1s; }
+button:active { transform: scale(.98); }
+label.opt:has(input:checked) { border-color: var(--gold); background: rgba(242,183,5,.08); }
+input:focus { outline: none; border-color: var(--gold); }
