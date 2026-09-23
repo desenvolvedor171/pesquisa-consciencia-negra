@@ -155,6 +155,15 @@ app.get('/api/surveys/:slug/epoch', async (req, res) => {
   res.json({ epoch: await getEpoch(survey.slug) });
 });
 
+// Confirmação real: o navegador pergunta ao servidor se este dispositivo já votou
+app.get('/api/surveys/:slug/status', async (req, res) => {
+  const survey = await getSurvey(req.params.slug);
+  if (!survey) return res.status(404).json({ error: 'Pesquisa não encontrada.' });
+  const epoch = await getEpoch(survey.slug);
+  const cookies = parseCookies(req);
+  res.json({ voted: cookies['respondido_' + survey.slug] === epoch, epoch });
+});
+
 app.post('/api/surveys/:slug/submit', async (req, res) => {
   const survey = await getSurvey(req.params.slug);
   if (!survey) return res.status(404).json({ error: 'Pesquisa não encontrada.' });

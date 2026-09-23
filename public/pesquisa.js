@@ -57,14 +57,27 @@ async function initSurvey(slug) {
     window.scrollTo(0, 0);
   }
 
+  async function fetchJSON(url, retries) {
+    let lastErr = null;
+    for (let i = 0; i < (retries || 3); i++) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw 0;
+        return await r.json();
+      } catch (e) {
+        lastErr = e;
+        await new Promise(res => setTimeout(res, 1500));
+      }
+    }
+    throw lastErr;
+  }
+
   async function load() {
     let meta;
     try {
-      const r = await fetch('/api/surveys/' + slug + '/questions');
-      if (!r.ok) throw 0;
-      meta = await r.json();
+      meta = await fetchJSON('/api/surveys/' + slug + '/questions', 3);
     } catch (e) {
-      loading.textContent = 'Não foi possível carregar. Verifique sua conexão e recarregue a página.';
+      loading.innerHTML = 'Não foi possível carregar. O servidor pode estar acordando, <a href="#" onclick="location.reload();return false;">clique aqui para tentar de novo</a>.';
       return;
     }
     document.title = meta.survey.title + ' – Escola Estadual Professor Manoel Rufino';
@@ -72,13 +85,11 @@ async function initSurvey(slug) {
     document.getElementById('surveyDesc').textContent = meta.survey.description;
     questions = meta.questions;
     try {
-      const er = await fetch('/api/surveys/' + slug + '/epoch');
-      currentEpoch = (await er.json()).epoch;
-      if (localStorage.getItem(EPKEY) !== currentEpoch) {
-        localStorage.removeItem(FLAG);
-        localStorage.setItem(EPKEY, currentEpoch);
-      }
-    } catch (e) { /* sem rede: segue o jogo */ }
+      const st = await fetchJSON('/api/surveys/' + slug + '/status', 3);
+      currentEpoch = st.epoch;
+      localStorage.setItem(EPKEY, st.epoch);
+      if (localStorage.getItem(FLAG) === '1' && !st.voted) localStorage.removeItem(FLAG);
+    } catch (e) { /* sem rede: segue com o estado local */ }
     if (localStorage.getItem(FLAG) === '1') { showAlready(); return; }
     loading.style.display = 'none';
     form.style.display = 'block';
