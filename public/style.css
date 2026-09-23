@@ -96,4 +96,4 @@ canvas { max-height: 220px; }
 .toolbar .spacer { flex: 1; }
 footer { text-align: center; color: var(--muted); padding: 20px; font-size: 0.85rem; }
 footer a { color: var(--gold); }
-.credit { position: fixed; right: 14px; bottom: 12px; font-size: 0.8rem; color: var(--muted); background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 8px; z-index: 10; }
+.credit { text-align: right; font-size: 0.8rem; color: var(--muted); padding: 0 14px 16px; }
