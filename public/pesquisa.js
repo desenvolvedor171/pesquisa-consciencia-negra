@@ -5,15 +5,11 @@ async function initSurvey(slug) {
   const already = document.getElementById('already');
   const phase = document.getElementById('phase');
   const final = document.getElementById('final');
-  const FLOW = {
-    'jogos-escolares': { page: '/cabelos-naturais.html', title: 'Estética, Identidade e Cabelos Naturais' },
-    'cabelos-naturais': { page: '/', title: 'Relações Étnico-Raciais nos Jogos Escolares' }
-  };
-  let cdTimer = null;
   const FLAG = 'pesquisa_respondida_' + slug;
   const EPKEY = 'pesquisa_epoch_' + slug;
   let questions = [];
   let currentEpoch = null;
+  let surveyList = [];
 
   function hideAll() {
     loading.style.display = 'none';
@@ -49,10 +45,14 @@ async function initSurvey(slug) {
   function showFinal() {
     hideAll();
     if (cdTimer) clearInterval(cdTimer);
-    const q1 = Number(localStorage.getItem('respondidas_jogos-escolares') || 0);
-    const q2 = Number(localStorage.getItem('respondidas_cabelos-naturais') || 0);
+    const list = surveyList.length ? surveyList : [{ slug }];
+    let totalQ = 0, doneCount = 0;
+    for (const s of list) {
+      totalQ += Number(localStorage.getItem('respondidas_' + s.slug) || 0);
+      if (localStorage.getItem('pesquisa_respondida_' + s.slug) === '1') doneCount++;
+    }
     document.getElementById('finalText').textContent =
-      `Você respondeu ${q1 + q2} perguntas nas 2 fases da pesquisa.`;
+      `Você respondeu ${totalQ} perguntas em ${doneCount} de ${list.length} fases da pesquisa.`;
     final.style.display = 'block';
     window.scrollTo(0, 0);
   }
@@ -84,6 +84,10 @@ async function initSurvey(slug) {
     document.getElementById('surveyTitle').textContent = meta.survey.title;
     document.getElementById('surveyDesc').textContent = meta.survey.description;
     questions = meta.questions;
+    try {
+      const sr = await fetch('/api/surveys');
+      if (sr.ok) surveyList = await sr.json();
+    } catch (e) { /* segue sem fluxo de fases */ }
     try {
       const st = await fetchJSON('/api/surveys/' + slug + '/status', 3);
       currentEpoch = st.epoch;
@@ -178,9 +182,10 @@ async function initSurvey(slug) {
       localStorage.setItem(FLAG, '1');
       if (currentEpoch) localStorage.setItem(EPKEY, currentEpoch);
       localStorage.setItem('respondidas_' + slug, String(questions.length));
-      const otherSlug = slug === 'jogos-escolares' ? 'cabelos-naturais' : 'jogos-escolares';
-      if (localStorage.getItem('pesquisa_respondida_' + otherSlug) === '1') showFinal();
-      else showPhase(FLOW[otherSlug]);
+      const idx = surveyList.findIndex(s => s.slug === slug);
+      const next = idx >= 0 ? surveyList[idx + 1] : null;
+      if (next && localStorage.getItem('pesquisa_respondida_' + next.slug) !== '1') showPhase(next);
+      else showFinal();
     } else if (res.status === 403) {
       localStorage.setItem(FLAG, '1');
       if (currentEpoch) localStorage.setItem(EPKEY, currentEpoch);

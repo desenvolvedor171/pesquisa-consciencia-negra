@@ -139,7 +139,11 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.get('/api/surveys', async (req, res) => {
   const rs = await db.execute('SELECT slug, title, description FROM surveys ORDER BY id');
-  res.json(rs.rows);
+  const info = Object.fromEntries(SURVEYS.map((s, i) => [s.slug, { page: '/' + s.page, order: i }]));
+  res.json(rs.rows
+    .filter(r => info[r.slug])
+    .map(r => ({ slug: r.slug, title: r.title, description: r.description, page: info[r.slug].page }))
+    .sort((a, b) => info[a.slug].order - info[b.slug].order));
 });
 
 app.get('/api/surveys/:slug/questions', async (req, res) => {
