@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+# sitemap: https://consciencia-negra-manoel-rufino.onrender.com/sitemap.xml
