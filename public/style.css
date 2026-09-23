@@ -121,3 +121,4 @@ input:focus { outline: none; border-color: var(--gold); }
 textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: #141114; color: var(--text); font-family: inherit; font-size: 0.95rem; resize: vertical; }
 textarea:focus { outline: none; border-color: var(--gold); }
 .text-answer { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 0.92rem; background: #141114; }
+.text-list { max-height: 280px; overflow-y: auto; padding-right: 6px; }

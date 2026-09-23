@@ -286,9 +286,19 @@ async function buildResults(survey) {
         sql: 'SELECT text_value AS t FROM answers WHERE question_id = ? AND text_value IS NOT NULL ORDER BY response_id DESC LIMIT 100',
         args: [q.id]
       });
+      const gs = await db.execute({
+        sql: 'SELECT TRIM(text_value) AS v, COUNT(*) AS c FROM answers WHERE question_id = ? AND text_value IS NOT NULL GROUP BY TRIM(text_value) ORDER BY COUNT(*) DESC',
+        args: [q.id]
+      });
+      const groups = gs.rows.map(r => ({
+        value: r.v,
+        votes: Number(r.c),
+        pct: totalResponses ? Math.round((Number(r.c) / totalResponses) * 1000) / 10 : 0
+      }));
       return {
         id: q.id, text: q.text, qtype: q.qtype, required: q.required,
-        total: rs.rows.length, texts: rs.rows.map(r => r.t)
+        total: groups.reduce((a, g) => a + g.votes, 0),
+        texts: rs.rows.map(r => r.t), groups
       };
     }
     const votes = new Array(q.options.length).fill(0);

@@ -28,7 +28,6 @@
         <button id="btnRefresh" class="secondary">Atualizar</button>
         <button id="btnExport" class="secondary">Exportar CSV</button>
         <button id="btnSync" class="secondary">Sincronizar perguntas</button>
-        <button id="btnPass" class="secondary">Trocar senha</button>
         <button id="btnReset" class="danger">Apagar respostas</button>
         <button id="btnLogout" class="secondary">Sair</button>
       </div>
@@ -117,7 +116,7 @@
 
     function sigOf(data) {
       return data.totalResponses + '|' + data.questions.map(q =>
-        q.qtype === 'text' ? ('T' + q.texts.join('~')) : q.votes.join(',')
+        q.qtype === 'text' ? ('T' + (q.groups || []).map(g => g.value + ':' + g.votes).join('~')) : q.votes.join(',')
       ).join(';');
     }
 
@@ -163,6 +162,28 @@
       };
     }
 
+    function chartDataFor(q) {
+      if (q.qtype === 'text') {
+        const top = (q.groups || []).slice(0, 10);
+        return {
+          labels: top.map(g => String(g.value).slice(0, 22)),
+          data: top.map(g => g.pct),
+          colors: top.map((_, i) => i === 0 ? '#f2b705' : '#55575c')
+        };
+      }
+      const bc = barColors(q);
+      return { labels: q.options.map((_, j) => letters[j]), data: q.percentages, colors: bc.colors };
+    }
+    function chartOpts() {
+      return {
+        animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
+          x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+        }
+      };
+    }
     function rowsFor(q) {
       return q.options.map((opt, j) => {
         const mark = (q.correct === j) ? ' <span class="correct-opt">✓</span>' : '';
@@ -195,37 +216,37 @@
           div.className = 'card';
           if (q.qtype === 'text') {
             div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span class="badge ${b.cls}">${b.text}</span></p>
-              <div id="texts${q.id}">${textsFor(q)}</div>`;
+              <canvas id="chart${q.id}"></canvas><div class="chart-legend"><span style="color:#f2b705">■</span> valor mais respondido</div>
+              <div id="texts${q.id}">${textsFor(q, q.id)}</div>`;
           } else {
             const bc = barColors(q);
             div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
               <canvas id="chart${q.id}"></canvas><div id="legend${q.id}" class="chart-legend">${bc.legend}</div><div id="rows${q.id}">${rowsFor(q)}</div>`;
           }
           box.appendChild(div);
-          if (q.qtype !== 'text') {
-            const bc = barColors(q);
-            charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
-              type: 'bar',
-              data: {
-                labels: q.options.map((_, j) => letters[j]),
-                datasets: [{ data: q.percentages, backgroundColor: bc.colors }]
-              },
-              options: {
-                animation: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
-                  x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
-                }
-              }
-            });
-          }
+          const gcd = chartDataFor(q);
+          charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
+            type: 'bar',
+            data: { labels: gcd.labels, datasets: [{ data: gcd.data, backgroundColor: gcd.colors }] },
+            options: chartOpts()
+          });
         });
       } else {
         data.questions.forEach((q) => {
           if (q.qtype === 'text') {
             const t = document.getElementById('texts' + q.id);
-            if (t) t.innerHTML = textsFor(q);
+            if (t) {
+              const f = document.getElementById('filter' + q.id);
+              const term = f ? f.value : '';
+              t.innerHTML = textsFor(q, q.id);
+              if (term) {
+                const nf = document.getElementById('filter' + q.id);
+                if (nf) { nf.value = term; filterTexts(q.id, term); }
+              }
+            }
+            const gcd = chartDataFor(q);
+            const tc = charts[q.id];
+            if (tc) { tc.data.labels = gcd.labels; tc.data.datasets[0].data = gcd.data; tc.data.datasets[0].backgroundColor = gcd.colors; tc.update('none'); }
             return;
           }
           const b = badgeData(q);
@@ -242,10 +263,22 @@
       }
     }
 
-    function textsFor(q) {
-      if (!q.texts.length) return '<p class="muted">Sem respostas ainda.</p>';
-      return `<p class="muted">${q.texts.length} resposta(s) — mais recentes primeiro</p>` +
-        q.texts.map(t => `<div class="text-answer">${esc(t)}</div>`).join('');
+    function textsFor(q, qid) {
+      return `<p class="muted">${q.total} resposta(s) · ${(q.groups || []).length} valor(es) distinto(s) — mais recentes primeiro</p>
+        <input type="text" id="filter${qid}" placeholder="Filtrar respostas..." oninput="filterTexts(${qid}, this.value)">
+        <div class="text-list" id="list${qid}">${textItems(q.texts)}</div>`;
+    }
+    function textItems(texts) {
+      if (!texts.length) return '<p class="muted">Sem respostas ainda.</p>';
+      return texts.map(t => `<div class="text-answer">${esc(t)}</div>`).join('');
+    }
+    function filterTexts(qid, term) {
+      const box = document.getElementById('list' + qid);
+      if (!box) return;
+      const t = term.trim().toLowerCase();
+      [...box.children].forEach(div => {
+        div.style.display = (!t || div.textContent.toLowerCase().includes(t)) ? '' : 'none';
+      });
     }
 
     document.getElementById('btnRefresh').addEventListener('click', () => loadResults(true));
@@ -269,20 +302,6 @@
       await fetch('/api/admin/reset?survey=' + encodeURIComponent(currentSlug), { method: 'POST' });
       loadResults(true);
     });
-    document.getElementById('btnPass').addEventListener('click', async () => {
-      const currentPassword = prompt('Digite a senha atual:');
-      if (!currentPassword) return;
-      const newPassword = prompt('Digite a nova senha (mínimo 4 caracteres):');
-      if (!newPassword) return;
-      const res = await fetch('/api/admin/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword })
-      });
-      const data = await res.json();
-      alert(res.ok ? 'Senha alterada com sucesso!' : (data.error || 'Erro.'));
-    });
-
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && dashOn) loadResults(false);
     });
