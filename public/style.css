@@ -105,6 +105,8 @@ footer a { color: var(--gold); }
 .live-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .card { animation: fadeUp .3s ease; }
+.card.missing { border-color: var(--red); box-shadow: 0 0 0 2px rgba(214,69,69,.6); animation: shake .3s; }
+@keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 /* Fluidez no público */
 html { scroll-behavior: smooth; }

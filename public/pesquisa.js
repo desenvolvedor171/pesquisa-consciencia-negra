@@ -88,14 +88,14 @@ async function initSurvey(slug) {
       let body = '';
       if (q.qtype === 'single') {
         body = q.options.map((opt, j) =>
-          `<label class="opt"><input type="radio" name="q${q.id}" value="${j}"${q.required ? ' required' : ''}> <b>${letters[j]}</b>) ${opt}</label>`
+          `<label class="opt"><input type="radio" name="q${q.id}" value="${j}"> <b>${letters[j]}</b>) ${opt}</label>`
         ).join('');
       } else if (q.qtype === 'multiple') {
         body = `<p class="muted" style="margin:0 0 8px">Marque todas as que se aplicam</p>` + q.options.map((opt, j) =>
           `<label class="opt"><input type="checkbox" name="q${q.id}" value="${j}"> <b>${letters[j]}</b>) ${opt}</label>`
         ).join('');
       } else {
-        body = `<textarea name="q${q.id}" rows="4" placeholder="Digite sua resposta..."${q.required ? ' required' : ''}></textarea>`;
+        body = `<textarea name="q${q.id}" rows="4" placeholder="Digite sua resposta..."></textarea>`;
       }
       div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}${q.required ? '' : ' <small class="muted">(opcional)</small>'}</p>` + body;
       form.appendChild(div);
@@ -116,26 +116,39 @@ async function initSurvey(slug) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = 'Enviando...';
-    const fail = (msg) => { alert(msg); btn.disabled = false; btn.textContent = originalText; };
+    const fail = (msg, qid) => {
+      alert(msg);
+      if (qid !== undefined) {
+        const input = form.querySelector(`input[name="q${qid}"], textarea[name="q${qid}"]`);
+        const card = input ? input.closest('.card') : null;
+        if (card) {
+          card.classList.add('missing');
+          setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+          setTimeout(() => card.classList.remove('missing'), 3500);
+        }
+      }
+      btn.disabled = false;
+      btn.textContent = originalText;
+    };
     const answers = [];
     for (let idx = 0; idx < questions.length; idx++) {
       const q = questions[idx];
       if (q.qtype === 'single') {
         const checked = form.querySelector(`input[name="q${q.id}"]:checked`);
         if (!checked) {
-          if (q.required) { fail(`Responda a pergunta ${idx + 1}.`); return; }
+          if (q.required) { fail(`Falta responder a pergunta ${idx + 1} de ${questions.length}.`, q.id); return; }
           answers.push({ questionId: q.id, optionIndex: null });
         } else {
           answers.push({ questionId: q.id, optionIndex: Number(checked.value) });
         }
       } else if (q.qtype === 'multiple') {
         const vals = [...form.querySelectorAll(`input[name="q${q.id}"]:checked`)].map(el => Number(el.value));
-        if (q.required && !vals.length) { fail(`Marque ao menos uma opção na pergunta ${idx + 1}.`); return; }
+        if (q.required && !vals.length) { fail(`Falta marcar a pergunta ${idx + 1} de ${questions.length}.`, q.id); return; }
         answers.push({ questionId: q.id, optionIndexes: vals });
       } else {
         const ta = form.querySelector(`textarea[name="q${q.id}"]`);
         const t = (ta.value || '').trim();
-        if (q.required && !t) { fail(`Responda a pergunta ${idx + 1}.`); ta.focus(); return; }
+        if (q.required && !t) { fail(`Falta responder a pergunta ${idx + 1} de ${questions.length}.`, q.id); return; }
         answers.push({ questionId: q.id, text: t });
       }
     }
