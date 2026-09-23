@@ -7,6 +7,7 @@ async function initSurvey(slug) {
   const final = document.getElementById('final');
   const FLAG = 'pesquisa_respondida_' + slug;
   const EPKEY = 'pesquisa_epoch_' + slug;
+  let cdTimer = null;
   let questions = [];
   let currentEpoch = null;
   let surveyList = [];
