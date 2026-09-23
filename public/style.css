@@ -91,6 +91,7 @@ input[type=text], input[type=password] {
 .badge.warn { background: var(--gold); color: #111; }
 .badge.info { background: #555; color: #fff; }
 .result-row { display: flex; justify-content: space-between; font-size: 0.95rem; padding: 4px 0; }
+.chart-legend { font-size: 0.8rem; color: var(--muted); margin: 2px 0 10px; }
 .correct-opt { color: #8fe3ae; font-weight: 700; }
 canvas { max-height: 220px; }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }

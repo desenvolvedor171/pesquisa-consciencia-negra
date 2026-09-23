@@ -121,6 +121,21 @@
       return { cls: q.correctRate >= 50 ? 'good' : 'warn', text: `Acertos: ${q.correctRate}%` };
     }
 
+    function barColors(q) {
+      if (q.correct === null || q.correct === undefined) {
+        let top = 0;
+        q.votes.forEach((v, i) => { if (v > q.votes[top]) top = i; });
+        return {
+          colors: q.votes.map((_, i) => i === top ? '#f2b705' : '#55575c'),
+          legend: '<span style="color:#f2b705">■</span> alternativa mais votada <span style="color:#55575c">■</span> demais'
+        };
+      }
+      return {
+        colors: q.votes.map((_, i) => i === q.correct ? '#2e9e5b' : '#55575c'),
+        legend: '<span style="color:#2e9e5b">■</span> resposta correta <span style="color:#55575c">■</span> demais alternativas'
+      };
+    }
+
     function rowsFor(q) {
       return q.options.map((opt, j) => {
         const mark = (q.correct === j) ? ' <span class="correct-opt">✓</span>' : '';
@@ -145,16 +160,17 @@
         box.innerHTML = '';
         data.questions.forEach((q, i) => {
           const b = badgeData(q);
+          const bc = barColors(q);
           const div = document.createElement('div');
           div.className = 'card';
           div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
-            <canvas id="chart${q.id}"></canvas><div id="rows${q.id}">${rowsFor(q)}</div>`;
+            <canvas id="chart${q.id}"></canvas><div id="legend${q.id}" class="chart-legend">${bc.legend}</div><div id="rows${q.id}">${rowsFor(q)}</div>`;
           box.appendChild(div);
           charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
             type: 'bar',
             data: {
               labels: ['A', 'B', 'C', 'D'],
-              datasets: [{ data: q.percentages, backgroundColor: ['#f2b705', '#2e9e5b', '#d64545', '#7a6ff0'] }]
+              datasets: [{ data: q.percentages, backgroundColor: bc.colors }]
             },
             options: {
               animation: false,
@@ -173,8 +189,11 @@
           if (badge) { badge.className = 'badge ' + b.cls; badge.textContent = b.text; }
           const rows = document.getElementById('rows' + q.id);
           if (rows) rows.innerHTML = rowsFor(q);
+          const bc2 = barColors(q);
+          const lg = document.getElementById('legend' + q.id);
+          if (lg) lg.innerHTML = bc2.legend;
           const c = charts[q.id];
-          if (c) { c.data.datasets[0].data = q.percentages; c.update('none'); }
+          if (c) { c.data.datasets[0].data = q.percentages; c.data.datasets[0].backgroundColor = bc2.colors; c.update('none'); }
         });
       }
     }
