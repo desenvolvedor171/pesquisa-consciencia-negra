@@ -112,3 +112,10 @@ button { transition: filter .15s, transform .1s; }
 button:active { transform: scale(.98); }
 label.opt:has(input:checked) { border-color: var(--gold); background: rgba(242,183,5,.08); }
 input:focus { outline: none; border-color: var(--gold); }
+.topnav { display: flex; gap: 20px; justify-content: center; margin-bottom: 16px; }
+.topnav a { color: var(--muted); font-weight: 700; font-size: 0.9rem; padding: 6px 4px; border-bottom: 2px solid transparent; }
+.topnav a:hover { color: var(--text); }
+.topnav a.active { color: var(--gold); border-bottom-color: var(--gold); }
+textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: #141114; color: var(--text); font-family: inherit; font-size: 0.95rem; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--gold); }
+.text-answer { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 0.92rem; background: #141114; }

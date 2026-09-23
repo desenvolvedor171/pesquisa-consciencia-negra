@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Admin — Pesquisa Consciência Negra | E.E. Prof. Manoel Rufino</title>
+  <title>Painel Admin — Pesquisas | E.E. Prof. Manoel Rufino</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header>
     <h1>Painel <span>do Administrador</span></h1>
-    <p>Resultados da pesquisa em porcentagens</p>
+    <p>Resultados das pesquisas em porcentagens</p>
   </header>
   <main>
     <div id="login" class="card" style="display:none">
@@ -32,18 +32,26 @@
         <button id="btnReset" class="danger">Apagar respostas</button>
         <button id="btnLogout" class="secondary">Sair</button>
       </div>
+      <div id="tabs" class="card toolbar"></div>
       <div id="results"></div>
     </div>
   </main>
-  <footer><a href="/">Voltar à pesquisa</a></footer>
+  <footer><a href="/">Voltar às pesquisas</a></footer>
 
   <script>
-    const letters = ['A', 'B', 'C', 'D'];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
     let charts = {};
     let cardIds = [];
     let lastSig = null;
     let pollTimer = null;
     let dashOn = false;
+    let surveys = [];
+    let currentSlug = null;
+
+    function setLive(on) {
+      const el = document.getElementById('live');
+      if (el) el.classList.toggle('on', on);
+    }
 
     async function checkLogin() {
       const res = await fetch('/api/admin/me');
@@ -74,6 +82,10 @@
       document.getElementById('login').style.display = 'none';
       document.getElementById('dash').style.display = 'block';
       dashOn = true;
+      const r = await fetch('/api/surveys');
+      surveys = await r.json();
+      if (!currentSlug && surveys.length) currentSlug = surveys[0].slug;
+      renderTabs();
       await loadResults(true);
       if (!pollTimer) {
         pollTimer = setInterval(() => {
@@ -82,28 +94,39 @@
       }
     }
 
-    function setLive(on) {
-      const el = document.getElementById('live');
-      if (el) el.classList.toggle('on', on);
+    function renderTabs() {
+      const box = document.getElementById('tabs');
+      box.innerHTML = '';
+      surveys.forEach((s, i) => {
+        const b = document.createElement('button');
+        b.className = s.slug === currentSlug ? '' : 'secondary';
+        b.textContent = `${i + 1}. ${s.title}`;
+        b.addEventListener('click', () => {
+          if (currentSlug === s.slug) return;
+          currentSlug = s.slug;
+          lastSig = null;
+          renderTabs();
+          loadResults(true);
+        });
+        box.appendChild(b);
+      });
     }
 
     function sigOf(data) {
-      return data.totalResponses + '|' + data.questions.map(q => q.votes.join(',')).join(';');
+      return data.totalResponses + '|' + data.questions.map(q =>
+        q.qtype === 'text' ? ('T' + q.texts.join('~')) : q.votes.join(',')
+      ).join(';');
     }
 
     async function loadResults(force) {
       let res;
       try {
-        res = await fetch('/api/admin/results');
+        res = await fetch('/api/admin/results?survey=' + encodeURIComponent(currentSlug));
       } catch (e) { setLive(false); return; }
       if (res.status === 401) {
         dashOn = false;
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && dashOn) loadResults(false);
-    });
-
-    checkLogin();
+        checkLogin();
         return;
       }
       const data = await res.json();
@@ -111,18 +134,19 @@
       document.getElementById('total').textContent =
         `${data.totalResponses} resposta(s) no total`;
       const sig = sigOf(data);
-      if (!force && sig === lastSig) return; // sem mudanças: não redesenha nada
+      if (!force && sig === lastSig) return;
       lastSig = sig;
       renderResults(data);
     }
 
     function badgeData(q) {
+      if (q.qtype === 'text') return { cls: 'info', text: 'Dissertativa' };
       if (q.correct === null || q.correct === undefined) return { cls: 'info', text: 'Opinião' };
       return { cls: q.correctRate >= 50 ? 'good' : 'warn', text: `Acertos: ${q.correctRate}%` };
     }
 
     function barColors(q) {
-      if (q.correct === null || q.correct === undefined) {
+      if (q.qtype === 'multiple' || q.correct === null || q.correct === undefined) {
         let top = 0;
         q.votes.forEach((v, i) => { if (v > q.votes[top]) top = i; });
         return {
@@ -143,6 +167,10 @@
       }).join('');
     }
 
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     function renderResults(data) {
       const box = document.getElementById('results');
       if (data.totalResponses === 0) {
@@ -160,48 +188,67 @@
         box.innerHTML = '';
         data.questions.forEach((q, i) => {
           const b = badgeData(q);
-          const bc = barColors(q);
           const div = document.createElement('div');
           div.className = 'card';
-          div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${q.text}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
-            <canvas id="chart${q.id}"></canvas><div id="legend${q.id}" class="chart-legend">${bc.legend}</div><div id="rows${q.id}">${rowsFor(q)}</div>`;
+          if (q.qtype === 'text') {
+            div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span class="badge ${b.cls}">${b.text}</span></p>
+              <div id="texts${q.id}">${textsFor(q)}</div>`;
+          } else {
+            const bc = barColors(q);
+            div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
+              <canvas id="chart${q.id}"></canvas><div id="legend${q.id}" class="chart-legend">${bc.legend}</div><div id="rows${q.id}">${rowsFor(q)}</div>`;
+          }
           box.appendChild(div);
-          charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
-            type: 'bar',
-            data: {
-              labels: ['A', 'B', 'C', 'D'],
-              datasets: [{ data: q.percentages, backgroundColor: bc.colors }]
-            },
-            options: {
-              animation: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
-                x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+          if (q.qtype !== 'text') {
+            const bc = barColors(q);
+            charts[q.id] = new Chart(document.getElementById('chart' + q.id), {
+              type: 'bar',
+              data: {
+                labels: q.options.map((_, j) => letters[j]),
+                datasets: [{ data: q.percentages, backgroundColor: bc.colors }]
+              },
+              options: {
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { max: 100, ticks: { color: '#b9aeb9', callback: v => v + '%' }, grid: { color: '#3a333a' } },
+                  x: { ticks: { color: '#f5f0f0' }, grid: { display: false } }
+                }
               }
-            }
-          });
+            });
+          }
         });
       } else {
         data.questions.forEach((q) => {
+          if (q.qtype === 'text') {
+            const t = document.getElementById('texts' + q.id);
+            if (t) t.innerHTML = textsFor(q);
+            return;
+          }
           const b = badgeData(q);
           const badge = document.getElementById('badge' + q.id);
           if (badge) { badge.className = 'badge ' + b.cls; badge.textContent = b.text; }
           const rows = document.getElementById('rows' + q.id);
           if (rows) rows.innerHTML = rowsFor(q);
-          const bc2 = barColors(q);
+          const bc = barColors(q);
           const lg = document.getElementById('legend' + q.id);
-          if (lg) lg.innerHTML = bc2.legend;
+          if (lg) lg.innerHTML = bc.legend;
           const c = charts[q.id];
-          if (c) { c.data.datasets[0].data = q.percentages; c.data.datasets[0].backgroundColor = bc2.colors; c.update('none'); }
+          if (c) { c.data.datasets[0].data = q.percentages; c.data.datasets[0].backgroundColor = bc.colors; c.update('none'); }
         });
       }
     }
 
+    function textsFor(q) {
+      if (!q.texts.length) return '<p class="muted">Sem respostas ainda.</p>';
+      return `<p class="muted">${q.texts.length} resposta(s) — mais recentes primeiro</p>` +
+        q.texts.map(t => `<div class="text-answer">${esc(t)}</div>`).join('');
+    }
+
     document.getElementById('btnRefresh').addEventListener('click', () => loadResults(true));
     document.getElementById('btnSync').addEventListener('click', async () => {
-      if (!confirm('Atualizar as perguntas a partir do arquivo questions.js?')) return;
-      const res = await fetch('/api/admin/sync-questions', { method: 'POST' });
+      if (!confirm('Atualizar as perguntas desta pesquisa a partir do arquivo?')) return;
+      const res = await fetch('/api/admin/sync-questions?survey=' + encodeURIComponent(currentSlug), { method: 'POST' });
       const data = await res.json();
       alert(data.message || data.error || 'Erro.');
       if (res.ok) loadResults(true);
@@ -211,11 +258,12 @@
       location.reload();
     });
     document.getElementById('btnExport').addEventListener('click', () => {
-      window.location = '/api/admin/export';
+      window.location = '/api/admin/export?survey=' + encodeURIComponent(currentSlug);
     });
     document.getElementById('btnReset').addEventListener('click', async () => {
-      if (!confirm('Apagar TODAS as respostas? Essa ação não pode ser desfeita.')) return;
-      await fetch('/api/admin/reset', { method: 'POST' });
+      const s = surveys.find(x => x.slug === currentSlug);
+      if (!confirm(`Apagar TODAS as respostas de "${s ? s.title : currentSlug}"? Essa ação não pode ser desfeita.`)) return;
+      await fetch('/api/admin/reset?survey=' + encodeURIComponent(currentSlug), { method: 'POST' });
       loadResults(true);
     });
     document.getElementById('btnPass').addEventListener('click', async () => {
@@ -230,6 +278,10 @@
       });
       const data = await res.json();
       alert(res.ok ? 'Senha alterada com sucesso!' : (data.error || 'Erro.'));
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && dashOn) loadResults(false);
     });
 
     checkLogin();
