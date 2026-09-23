@@ -217,7 +217,7 @@
           if (q.qtype === 'text') {
             div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span class="badge ${b.cls}">${b.text}</span></p>
               <canvas id="chart${q.id}"></canvas><div class="chart-legend"><span style="color:#f2b705">■</span> valor mais respondido</div>
-              <div id="texts${q.id}">${textsFor(q, q.id)}</div>`;
+              <div id="texts${q.id}">${textsFor(q)}</div>`;
           } else {
             const bc = barColors(q);
             div.innerHTML = `<p class="q-title"><span class="num">${i + 1}</span>${esc(q.text)}<span id="badge${q.id}" class="badge ${b.cls}">${b.text}</span></p>
@@ -235,15 +235,7 @@
         data.questions.forEach((q) => {
           if (q.qtype === 'text') {
             const t = document.getElementById('texts' + q.id);
-            if (t) {
-              const f = document.getElementById('filter' + q.id);
-              const term = f ? f.value : '';
-              t.innerHTML = textsFor(q, q.id);
-              if (term) {
-                const nf = document.getElementById('filter' + q.id);
-                if (nf) { nf.value = term; filterTexts(q.id, term); }
-              }
-            }
+            if (t) t.innerHTML = textsFor(q);
             const gcd = chartDataFor(q);
             const tc = charts[q.id];
             if (tc) { tc.data.labels = gcd.labels; tc.data.datasets[0].data = gcd.data; tc.data.datasets[0].backgroundColor = gcd.colors; tc.update('none'); }
@@ -263,22 +255,8 @@
       }
     }
 
-    function textsFor(q, qid) {
-      return `<p class="muted">${q.total} resposta(s) · ${(q.groups || []).length} valor(es) distinto(s) — mais recentes primeiro</p>
-        <input type="text" id="filter${qid}" placeholder="Filtrar respostas..." oninput="filterTexts(${qid}, this.value)">
-        <div class="text-list" id="list${qid}">${textItems(q.texts)}</div>`;
-    }
-    function textItems(texts) {
-      if (!texts.length) return '<p class="muted">Sem respostas ainda.</p>';
-      return texts.map(t => `<div class="text-answer">${esc(t)}</div>`).join('');
-    }
-    function filterTexts(qid, term) {
-      const box = document.getElementById('list' + qid);
-      if (!box) return;
-      const t = term.trim().toLowerCase();
-      [...box.children].forEach(div => {
-        div.style.display = (!t || div.textContent.toLowerCase().includes(t)) ? '' : 'none';
-      });
+    function textsFor(q) {
+      return `<p class="muted">${q.total} resposta(s) · ${(q.groups || []).length} valor(es) distinto(s)</p>`;
     }
 
     document.getElementById('btnRefresh').addEventListener('click', () => loadResults(true));
